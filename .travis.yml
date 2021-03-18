@@ -14,11 +14,12 @@ addons:
     - clang-9
     - build-essential pkg-config
     - cmake
-    - libpython-dev python-numpy
+    - python3-dev libpython-dev
+    - python3-numpy
     - libboost-all-dev
 
 # before_install:
-#  - if [ "$TRAVIS_OS_NAME" == "osx" ]; then brew update          ; fi
+  # - if [ "$TRAVIS_OS_NAME" == "osx" ]; then brew update; fi
 
 install:
   - if [ "$TRAVIS_OS_NAME" == "osx" ]; then HOMEBREW_NO_AUTO_UPDATE=1 brew install ccache  ; fi
@@ -89,6 +90,12 @@ jobs:
     compiler: clang
     env: CC=clang-9 CXX=clang++-9 CMAKE_BUILD_TYPE=Debug GTSAM_BUILD_UNSTABLE=OFF GTSAM_ALLOW_DEPRECATED_SINCE_V4=ON
     script: bash .travis.sh -b
+# on Linux, with GTSAM_WITH_TBB on to make sure GTSAM still compiles/tests
+  - stage: special
+    os: linux
+    compiler: gcc
+    env: CMAKE_BUILD_TYPE=Debug GTSAM_BUILD_UNSTABLE=OFF GTSAM_WITH_TBB=ON
+    script: bash .travis.sh -t
 # -------- STAGE 2: TESTS -----------
 # on Mac, GCC
   - stage: test

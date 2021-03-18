@@ -419,6 +419,29 @@ TEST(Pose3, transform_to_rotate) {
 }
 
 /* ************************************************************************* */
+// Check transformPoseFrom and its pushforward
+Pose3 transformPoseFrom_(const Pose3& wTa, const Pose3& aTb) {
+  return wTa.transformPoseFrom(aTb);
+}
+
+TEST(Pose3, transformPoseFrom)
+{
+  Matrix actual = (T2*T2).matrix();
+  Matrix expected = T2.matrix()*T2.matrix();
+  EXPECT(assert_equal(actual, expected, 1e-8));
+
+  Matrix H1, H2;
+  T2.transformPoseFrom(T2, H1, H2);
+
+  Matrix numericalH1 = numericalDerivative21(transformPoseFrom_, T2, T2);
+  EXPECT(assert_equal(numericalH1, H1, 5e-3));
+  EXPECT(assert_equal(T2.inverse().AdjointMap(), H1, 5e-3));
+
+  Matrix numericalH2 = numericalDerivative22(transformPoseFrom_, T2, T2);
+  EXPECT(assert_equal(numericalH2, H2, 1e-4));
+}
+
+/* ************************************************************************* */
 TEST(Pose3, transformTo) {
   Pose3 transform(Rot3::Rodrigues(0, 0, -1.570796), Point3(2, 4, 0));
   Point3 actual = transform.transformTo(Point3(3, 2, 10));
@@ -649,8 +672,8 @@ TEST(Pose3, Bearing) {
   // Check numerical derivatives
   expectedH1 = numericalDerivative21(bearing_proxy, x1, l1);
   expectedH2 = numericalDerivative22(bearing_proxy, x1, l1);
-  EXPECT(assert_equal(expectedH1, actualH1));
-  EXPECT(assert_equal(expectedH2, actualH2));
+  EXPECT(assert_equal(expectedH1, actualH1, 1e-5));
+  EXPECT(assert_equal(expectedH2, actualH2, 1e-5));
 }
 
 TEST(Pose3, Bearing2) {
@@ -660,8 +683,8 @@ TEST(Pose3, Bearing2) {
   // Check numerical derivatives
   expectedH1 = numericalDerivative21(bearing_proxy, x2, l4);
   expectedH2 = numericalDerivative22(bearing_proxy, x2, l4);
-  EXPECT(assert_equal(expectedH1, actualH1));
-  EXPECT(assert_equal(expectedH2, actualH2));
+  EXPECT(assert_equal(expectedH1, actualH1, 1e-5));
+  EXPECT(assert_equal(expectedH2, actualH2, 1e-5));
 }
 
 TEST(Pose3, PoseToPoseBearing) {
@@ -681,8 +704,8 @@ TEST(Pose3, PoseToPoseBearing) {
   expectedH2.setZero();
   expectedH2.block<2, 3>(0, 3) = H2block;
 
-  EXPECT(assert_equal(expectedH1, actualH1));
-  EXPECT(assert_equal(expectedH2, actualH2));
+  EXPECT(assert_equal(expectedH1, actualH1, 1e-5));
+  EXPECT(assert_equal(expectedH2, actualH2, 1e-5));
 }
 
 /* ************************************************************************* */
@@ -1008,13 +1031,20 @@ TEST(Pose3, print) {
   // Generate the expected output
   std::stringstream expected;
   Point3 translation(1, 2, 3);
+
+#ifdef GTSAM_TYPEDEF_POINTS_TO_VECTORS
+  expected << "1\n"
+              "2\n"
+              "3;\n";
+#else
   expected << '[' << translation.x() << ", " << translation.y() << ", " << translation.z() << "]\';";
+#endif
 
   // reset cout to the original stream
   std::cout.rdbuf(oldbuf);
 
   // Get substring corresponding to translation part
-  std::string actual = redirectStream.str().substr(47, 11);
+  std::string actual = redirectStream.str().substr(38, 11);
 
   CHECK_EQUAL(expected.str(), actual);
 }
