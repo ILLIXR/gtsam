@@ -8,6 +8,7 @@ project(
 
 set(CEPHES_HEADER_FILES
     cephes.h
+    dllexport.h
     cephes/dd_idefs.h
     cephes/dd_real.h
     cephes/dd_real_idefs.h
