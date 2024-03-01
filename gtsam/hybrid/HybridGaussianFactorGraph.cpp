@@ -48,8 +48,6 @@
 #include <utility>
 #include <vector>
 
-// #define HYBRID_TIMING
-
 namespace gtsam {
 
 /// Specialize EliminateableFactorGraph for HybridGaussianFactorGraph:
@@ -77,6 +75,85 @@ const Ordering HybridOrdering(const HybridGaussianFactorGraph &graph) {
 }
 
 /* ************************************************************************ */
+void HybridGaussianFactorGraph::printErrors(
+    const HybridValues &values, const std::string &str,
+    const KeyFormatter &keyFormatter,
+    const std::function<bool(const Factor * /*factor*/,
+                             double /*whitenedError*/, size_t /*index*/)>
+        &printCondition) const {
+  std::cout << str << "size: " << size() << std::endl << std::endl;
+
+  std::stringstream ss;
+
+  for (size_t i = 0; i < factors_.size(); i++) {
+    auto &&factor = factors_[i];
+    std::cout << "Factor " << i << ": ";
+
+    // Clear the stringstream
+    ss.str(std::string());
+
+    if (auto gmf = std::dynamic_pointer_cast<GaussianMixtureFactor>(factor)) {
+      if (factor == nullptr) {
+        std::cout << "nullptr"
+                  << "\n";
+      } else {
+        factor->print(ss.str(), keyFormatter);
+        std::cout << "error = ";
+        gmf->errorTree(values.continuous()).print("", keyFormatter);
+        std::cout << std::endl;
+      }
+    } else if (auto hc = std::dynamic_pointer_cast<HybridConditional>(factor)) {
+      if (factor == nullptr) {
+        std::cout << "nullptr"
+                  << "\n";
+      } else {
+        factor->print(ss.str(), keyFormatter);
+
+        if (hc->isContinuous()) {
+          std::cout << "error = " << hc->asGaussian()->error(values) << "\n";
+        } else if (hc->isDiscrete()) {
+          std::cout << "error = ";
+          hc->asDiscrete()->errorTree().print("", keyFormatter);
+          std::cout << "\n";
+        } else {
+          // Is hybrid
+          std::cout << "error = ";
+          hc->asMixture()->errorTree(values.continuous()).print();
+          std::cout << "\n";
+        }
+      }
+    } else if (auto gf = std::dynamic_pointer_cast<GaussianFactor>(factor)) {
+      const double errorValue = (factor != nullptr ? gf->error(values) : .0);
+      if (!printCondition(factor.get(), errorValue, i))
+        continue;  // User-provided filter did not pass
+
+      if (factor == nullptr) {
+        std::cout << "nullptr"
+                  << "\n";
+      } else {
+        factor->print(ss.str(), keyFormatter);
+        std::cout << "error = " << errorValue << "\n";
+      }
+    } else if (auto df = std::dynamic_pointer_cast<DiscreteFactor>(factor)) {
+      if (factor == nullptr) {
+        std::cout << "nullptr"
+                  << "\n";
+      } else {
+        factor->print(ss.str(), keyFormatter);
+        std::cout << "error = ";
+        df->errorTree().print("", keyFormatter);
+      }
+
+    } else {
+      continue;
+    }
+
+    std::cout << "\n";
+  }
+  std::cout.flush();
+}
+
+/* ************************************************************************ */
 static GaussianFactorGraphTree addGaussian(
     const GaussianFactorGraphTree &gfgTree,
     const GaussianFactor::shared_ptr &factor) {
@@ -98,8 +175,6 @@ static GaussianFactorGraphTree addGaussian(
 // TODO(dellaert): it's probably more efficient to first collect the discrete
 // keys, and then loop over all assignments to populate a vector.
 GaussianFactorGraphTree HybridGaussianFactorGraph::assembleGraphTree() const {
-  gttic(assembleGraphTree);
-
   GaussianFactorGraphTree result;
 
   for (auto &f : factors_) {
@@ -120,7 +195,7 @@ GaussianFactorGraphTree HybridGaussianFactorGraph::assembleGraphTree() const {
         // TODO(dellaert): in C++20, we can use std::visit.
         continue;
       }
-    } else if (dynamic_pointer_cast<DecisionTreeFactor>(f)) {
+    } else if (dynamic_pointer_cast<DiscreteFactor>(f)) {
       // Don't do anything for discrete-only factors
       // since we want to eliminate continuous values only.
       continue;
@@ -130,8 +205,6 @@ GaussianFactorGraphTree HybridGaussianFactorGraph::assembleGraphTree() const {
       throwRuntimeError("gtsam::assembleGraphTree", f);
     }
   }
-
-  gttoc(assembleGraphTree);
 
   return result;
 }
@@ -167,17 +240,17 @@ discreteElimination(const HybridGaussianFactorGraph &factors,
   DiscreteFactorGraph dfg;
 
   for (auto &f : factors) {
-    if (auto dtf = dynamic_pointer_cast<DecisionTreeFactor>(f)) {
-      dfg.push_back(dtf);
+    if (auto df = dynamic_pointer_cast<DiscreteFactor>(f)) {
+      dfg.push_back(df);
     } else if (auto orphan = dynamic_pointer_cast<OrphanWrapper>(f)) {
       // Ignore orphaned clique.
       // TODO(dellaert): is this correct? If so explain here.
     } else if (auto hc = dynamic_pointer_cast<HybridConditional>(f)) {
       auto dc = hc->asDiscrete();
-      if (!dc) throwRuntimeError("continuousElimination", dc);
+      if (!dc) throwRuntimeError("discreteElimination", dc);
       dfg.push_back(hc->asDiscrete());
     } else {
-      throwRuntimeError("continuousElimination", f);
+      throwRuntimeError("discreteElimination", f);
     }
   }
 
@@ -190,7 +263,8 @@ discreteElimination(const HybridGaussianFactorGraph &factors,
 /* ************************************************************************ */
 // If any GaussianFactorGraph in the decision tree contains a nullptr, convert
 // that leaf to an empty GaussianFactorGraph. Needed since the DecisionTree will
-// otherwise create a GFG with a single (null) factor, which doesn't register as null.
+// otherwise create a GFG with a single (null) factor,
+// which doesn't register as null.
 GaussianFactorGraphTree removeEmpty(const GaussianFactorGraphTree &sum) {
   auto emptyGaussian = [](const GaussianFactorGraph &graph) {
     bool hasNull =
@@ -202,6 +276,51 @@ GaussianFactorGraphTree removeEmpty(const GaussianFactorGraphTree &sum) {
 }
 
 /* ************************************************************************ */
+using Result = std::pair<std::shared_ptr<GaussianConditional>,
+                         GaussianMixtureFactor::sharedFactor>;
+
+// Integrate the probability mass in the last continuous conditional using
+// the unnormalized probability q(μ;m) = exp(-error(μ;m)) at the mean.
+//   discrete_probability = exp(-error(μ;m)) * sqrt(det(2π Σ_m))
+static std::shared_ptr<Factor> createDiscreteFactor(
+    const DecisionTree<Key, Result> &eliminationResults,
+    const DiscreteKeys &discreteSeparator) {
+  auto probability = [&](const Result &pair) -> double {
+    const auto &[conditional, factor] = pair;
+    static const VectorValues kEmpty;
+    // If the factor is not null, it has no keys, just contains the residual.
+    if (!factor) return 1.0;  // TODO(dellaert): not loving this.
+    return exp(-factor->error(kEmpty)) / conditional->normalizationConstant();
+  };
+
+  DecisionTree<Key, double> probabilities(eliminationResults, probability);
+
+  return std::make_shared<DecisionTreeFactor>(discreteSeparator, probabilities);
+}
+
+// Create GaussianMixtureFactor on the separator, taking care to correct
+// for conditional constants.
+static std::shared_ptr<Factor> createGaussianMixtureFactor(
+    const DecisionTree<Key, Result> &eliminationResults,
+    const KeyVector &continuousSeparator,
+    const DiscreteKeys &discreteSeparator) {
+  // Correct for the normalization constant used up by the conditional
+  auto correct = [&](const Result &pair) -> GaussianFactor::shared_ptr {
+    const auto &[conditional, factor] = pair;
+    if (factor) {
+      auto hf = std::dynamic_pointer_cast<HessianFactor>(factor);
+      if (!hf) throw std::runtime_error("Expected HessianFactor!");
+      hf->constantTerm() += 2.0 * conditional->logNormalizationConstant();
+    }
+    return factor;
+  };
+  DecisionTree<Key, GaussianFactor::shared_ptr> newFactors(eliminationResults,
+                                                           correct);
+
+  return std::make_shared<GaussianMixtureFactor>(continuousSeparator,
+                                                 discreteSeparator, newFactors);
+}
+
 static std::pair<HybridConditional::shared_ptr, std::shared_ptr<Factor>>
 hybridElimination(const HybridGaussianFactorGraph &factors,
                   const Ordering &frontalKeys,
@@ -221,24 +340,13 @@ hybridElimination(const HybridGaussianFactorGraph &factors,
   // FG has a nullptr as we're looping over the factors.
   factorGraphTree = removeEmpty(factorGraphTree);
 
-  using Result = std::pair<std::shared_ptr<GaussianConditional>,
-                           GaussianMixtureFactor::sharedFactor>;
-
   // This is the elimination method on the leaf nodes
   auto eliminate = [&](const GaussianFactorGraph &graph) -> Result {
     if (graph.empty()) {
       return {nullptr, nullptr};
     }
 
-#ifdef HYBRID_TIMING
-    gttic_(hybrid_eliminate);
-#endif
-
     auto result = EliminatePreferCholesky(graph, frontalKeys);
-
-#ifdef HYBRID_TIMING
-    gttoc_(hybrid_eliminate);
-#endif
 
     return result;
   };
@@ -246,57 +354,22 @@ hybridElimination(const HybridGaussianFactorGraph &factors,
   // Perform elimination!
   DecisionTree<Key, Result> eliminationResults(factorGraphTree, eliminate);
 
-#ifdef HYBRID_TIMING
-  tictoc_print_();
-  tictoc_reset_();
-#endif
-
-  // Separate out decision tree into conditionals and remaining factors.
-  const auto [conditionals, newFactors] = unzip(eliminationResults);
+  // If there are no more continuous parents we create a DiscreteFactor with the
+  // error for each discrete choice. Otherwise, create a GaussianMixtureFactor
+  // on the separator, taking care to correct for conditional constants.
+  auto newFactor =
+      continuousSeparator.empty()
+          ? createDiscreteFactor(eliminationResults, discreteSeparator)
+          : createGaussianMixtureFactor(eliminationResults, continuousSeparator,
+                                        discreteSeparator);
 
   // Create the GaussianMixture from the conditionals
+  GaussianMixture::Conditionals conditionals(
+      eliminationResults, [](const Result &pair) { return pair.first; });
   auto gaussianMixture = std::make_shared<GaussianMixture>(
       frontalKeys, continuousSeparator, discreteSeparator, conditionals);
 
-  if (continuousSeparator.empty()) {
-    // If there are no more continuous parents, then we create a
-    // DiscreteFactor here, with the error for each discrete choice.
-
-    // Integrate the probability mass in the last continuous conditional using
-    // the unnormalized probability q(μ;m) = exp(-error(μ;m)) at the mean.
-    //   discrete_probability = exp(-error(μ;m)) * sqrt(det(2π Σ_m))
-    auto probability = [&](const Result &pair) -> double {
-      static const VectorValues kEmpty;
-      // If the factor is not null, it has no keys, just contains the residual.
-      const auto &factor = pair.second;
-      if (!factor) return 1.0;  // TODO(dellaert): not loving this.
-      return exp(-factor->error(kEmpty)) / pair.first->normalizationConstant();
-    };
-
-    DecisionTree<Key, double> probabilities(eliminationResults, probability);
-    return {
-        std::make_shared<HybridConditional>(gaussianMixture),
-        std::make_shared<DecisionTreeFactor>(discreteSeparator, probabilities)};
-  } else {
-    // Otherwise, we create a resulting GaussianMixtureFactor on the separator,
-    // taking care to correct for conditional constant.
-
-    // Correct for the normalization constant used up by the conditional
-    auto correct = [&](const Result &pair) {
-      const auto &factor = pair.second;
-      if (!factor) return;
-      auto hf = std::dynamic_pointer_cast<HessianFactor>(factor);
-      if (!hf) throw std::runtime_error("Expected HessianFactor!");
-      hf->constantTerm() += 2.0 * pair.first->logNormalizationConstant();
-    };
-    eliminationResults.visit(correct);
-
-    const auto mixtureFactor = std::make_shared<GaussianMixtureFactor>(
-        continuousSeparator, discreteSeparator, newFactors);
-
-    return {std::make_shared<HybridConditional>(gaussianMixture),
-            mixtureFactor};
-  }
+  return {std::make_shared<HybridConditional>(gaussianMixture), newFactor};
 }
 
 /* ************************************************************************
@@ -360,72 +433,73 @@ EliminateHybrid(const HybridGaussianFactorGraph &factors,
   // When the number of assignments is large we may encounter stack overflows.
   // However this is also the case with iSAM2, so no pressure :)
 
-  // PREPROCESS: Identify the nature of the current elimination
-
-  // TODO(dellaert): just check the factors:
+  // Check the factors:
   // 1. if all factors are discrete, then we can do discrete elimination:
   // 2. if all factors are continuous, then we can do continuous elimination:
   // 3. if not, we do hybrid elimination:
 
-  // First, identify the separator keys, i.e. all keys that are not frontal.
-  KeySet separatorKeys;
+  bool only_discrete = true, only_continuous = true;
   for (auto &&factor : factors) {
-    separatorKeys.insert(factor->begin(), factor->end());
-  }
-  // remove frontals from separator
-  for (auto &k : frontalKeys) {
-    separatorKeys.erase(k);
-  }
-
-  // Build a map from keys to DiscreteKeys
-  auto mapFromKeyToDiscreteKey = factors.discreteKeyMap();
-
-  // Fill in discrete frontals and continuous frontals.
-  std::set<DiscreteKey> discreteFrontals;
-  KeySet continuousFrontals;
-  for (auto &k : frontalKeys) {
-    if (mapFromKeyToDiscreteKey.find(k) != mapFromKeyToDiscreteKey.end()) {
-      discreteFrontals.insert(mapFromKeyToDiscreteKey.at(k));
-    } else {
-      continuousFrontals.insert(k);
+    if (auto hybrid_factor = std::dynamic_pointer_cast<HybridFactor>(factor)) {
+      if (hybrid_factor->isDiscrete()) {
+        only_continuous = false;
+      } else if (hybrid_factor->isContinuous()) {
+        only_discrete = false;
+      } else if (hybrid_factor->isHybrid()) {
+        only_continuous = false;
+        only_discrete = false;
+      }
+    } else if (auto cont_factor =
+                   std::dynamic_pointer_cast<GaussianFactor>(factor)) {
+      only_discrete = false;
+    } else if (auto discrete_factor =
+                   std::dynamic_pointer_cast<DiscreteFactor>(factor)) {
+      only_continuous = false;
     }
   }
-
-  // Fill in discrete discrete separator keys and continuous separator keys.
-  std::set<DiscreteKey> discreteSeparatorSet;
-  KeyVector continuousSeparator;
-  for (auto &k : separatorKeys) {
-    if (mapFromKeyToDiscreteKey.find(k) != mapFromKeyToDiscreteKey.end()) {
-      discreteSeparatorSet.insert(mapFromKeyToDiscreteKey.at(k));
-    } else {
-      continuousSeparator.push_back(k);
-    }
-  }
-
-  // Check if we have any continuous keys:
-  const bool discrete_only =
-      continuousFrontals.empty() && continuousSeparator.empty();
 
   // NOTE: We should really defer the product here because of pruning
 
-  if (discrete_only) {
+  if (only_discrete) {
     // Case 1: we are only dealing with discrete
     return discreteElimination(factors, frontalKeys);
-  } else if (mapFromKeyToDiscreteKey.empty()) {
+  } else if (only_continuous) {
     // Case 2: we are only dealing with continuous
     return continuousElimination(factors, frontalKeys);
   } else {
     // Case 3: We are now in the hybrid land!
-#ifdef HYBRID_TIMING
-    tictoc_reset_();
-#endif
+    KeySet frontalKeysSet(frontalKeys.begin(), frontalKeys.end());
+
+    // Find all the keys in the set of continuous keys
+    // which are not in the frontal keys. This is our continuous separator.
+    KeyVector continuousSeparator;
+    auto continuousKeySet = factors.continuousKeySet();
+    std::set_difference(
+        continuousKeySet.begin(), continuousKeySet.end(),
+        frontalKeysSet.begin(), frontalKeysSet.end(),
+        std::inserter(continuousSeparator, continuousSeparator.begin()));
+
+    // Similarly for the discrete separator.
+    KeySet discreteSeparatorSet;
+    std::set<DiscreteKey> discreteSeparator;
+    auto discreteKeySet = factors.discreteKeySet();
+    std::set_difference(
+        discreteKeySet.begin(), discreteKeySet.end(), frontalKeysSet.begin(),
+        frontalKeysSet.end(),
+        std::inserter(discreteSeparatorSet, discreteSeparatorSet.begin()));
+    // Convert from set of keys to set of DiscreteKeys
+    auto discreteKeyMap = factors.discreteKeyMap();
+    for (auto key : discreteSeparatorSet) {
+      discreteSeparator.insert(discreteKeyMap.at(key));
+    }
+
     return hybridElimination(factors, frontalKeys, continuousSeparator,
-                             discreteSeparatorSet);
+                             discreteSeparator);
   }
 }
 
 /* ************************************************************************ */
-AlgebraicDecisionTree<Key> HybridGaussianFactorGraph::error(
+AlgebraicDecisionTree<Key> HybridGaussianFactorGraph::errorTree(
     const VectorValues &continuousValues) const {
   AlgebraicDecisionTree<Key> error_tree(0.0);
 
@@ -436,7 +510,7 @@ AlgebraicDecisionTree<Key> HybridGaussianFactorGraph::error(
 
     if (auto gaussianMixture = dynamic_pointer_cast<GaussianMixtureFactor>(f)) {
       // Compute factor error and add it.
-      error_tree = error_tree + gaussianMixture->error(continuousValues);
+      error_tree = error_tree + gaussianMixture->errorTree(continuousValues);
     } else if (auto gaussian = dynamic_pointer_cast<GaussianFactor>(f)) {
       // If continuous only, get the (double) error
       // and add it to the error_tree
@@ -444,7 +518,7 @@ AlgebraicDecisionTree<Key> HybridGaussianFactorGraph::error(
       // Add the gaussian factor error to every leaf of the error tree.
       error_tree = error_tree.apply(
           [error](double leaf_value) { return leaf_value + error; });
-    } else if (dynamic_pointer_cast<DecisionTreeFactor>(f)) {
+    } else if (dynamic_pointer_cast<DiscreteFactor>(f)) {
       // If factor at `idx` is discrete-only, we skip.
       continue;
     } else {
@@ -465,7 +539,7 @@ double HybridGaussianFactorGraph::probPrime(const HybridValues &values) const {
 /* ************************************************************************ */
 AlgebraicDecisionTree<Key> HybridGaussianFactorGraph::probPrime(
     const VectorValues &continuousValues) const {
-  AlgebraicDecisionTree<Key> error_tree = this->error(continuousValues);
+  AlgebraicDecisionTree<Key> error_tree = this->errorTree(continuousValues);
   AlgebraicDecisionTree<Key> prob_tree = error_tree.apply([](double error) {
     // NOTE: The 0.5 term is handled by each factor
     return exp(-error);

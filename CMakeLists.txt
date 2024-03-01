@@ -17,17 +17,15 @@ set (GTSAM_VERSION_PATCH 0)
 set (GTSAM_PRERELEASE_VERSION "a0")
 math (EXPR GTSAM_VERSION_NUMERIC "10000 * ${GTSAM_VERSION_MAJOR} + 100 * ${GTSAM_VERSION_MINOR} + ${GTSAM_VERSION_PATCH}")
 
-if (${GTSAM_VERSION_PATCH} EQUAL 0)
-    set (GTSAM_VERSION_STRING "${GTSAM_VERSION_MAJOR}.${GTSAM_VERSION_MINOR}${GTSAM_PRERELEASE_VERSION}")
+if ("${GTSAM_PRERELEASE_VERSION}" STREQUAL "")
+    set (GTSAM_VERSION_STRING "${GTSAM_VERSION_MAJOR}.${GTSAM_VERSION_MINOR}.${GTSAM_VERSION_PATCH}")
 else()
-    set (GTSAM_VERSION_STRING "${GTSAM_VERSION_MAJOR}.${GTSAM_VERSION_MINOR}.${GTSAM_VERSION_PATCH}${GTSAM_PRERELEASE_VERSION}")
+    set (GTSAM_VERSION_STRING "${GTSAM_VERSION_MAJOR}.${GTSAM_VERSION_MINOR}${GTSAM_PRERELEASE_VERSION}")
 endif()
 
 project(GTSAM
         LANGUAGES CXX C
         VERSION "${GTSAM_VERSION_MAJOR}.${GTSAM_VERSION_MINOR}.${GTSAM_VERSION_PATCH}")
-
-message(STATUS "GTSAM Version: ${GTSAM_VERSION_STRING}")
 
 set (CMAKE_PROJECT_VERSION_MAJOR ${GTSAM_VERSION_MAJOR})
 set (CMAKE_PROJECT_VERSION_MINOR ${GTSAM_VERSION_MINOR})
@@ -36,16 +34,17 @@ set (CMAKE_PROJECT_VERSION_PATCH ${GTSAM_VERSION_PATCH})
 ###############################################################################
 # Gather information, perform checks, set defaults
 
+if(MSVC)
+  set(MSVC_LINKER_FLAGS "/FORCE:MULTIPLE")
+  set(CMAKE_EXE_LINKER_FLAGS ${MSVC_LINKER_FLAGS})
+  set(CMAKE_MODULE_LINKER_FLAGS ${MSVC_LINKER_FLAGS})
+  set(CMAKE_SHARED_LINKER_FLAGS ${MSVC_LINKER_FLAGS})
+  set(CMAKE_STATIC_LINKER_FLAGS ${MSVC_LINKER_FLAGS})
+endif()
+
 set(CMAKE_MODULE_PATH "${CMAKE_MODULE_PATH}" "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 include(GtsamMakeConfigFile)
 include(GNUInstallDirs)
-
-# Load build type flags and default to Debug mode
-include(GtsamBuildTypes)
-
-# Use macros for creating tests/timing scripts
-include(GtsamTesting)
-include(GtsamPrinting)
 
 # guard against in-source builds
 if(${GTSAM_SOURCE_DIR} STREQUAL ${GTSAM_BINARY_DIR})
@@ -53,6 +52,13 @@ if(${GTSAM_SOURCE_DIR} STREQUAL ${GTSAM_BINARY_DIR})
 endif()
 
 include(cmake/HandleGeneralOptions.cmake)   # CMake build options
+
+# Load build type flags and default to Debug mode
+include(GtsamBuildTypes)
+
+# Use macros for creating tests/timing scripts
+include(GtsamTesting)
+include(GtsamPrinting)
 
 ############### Decide on BOOST ######################################
 # Enable or disable serialization with GTSAM_ENABLE_BOOST_SERIALIZATION
@@ -76,6 +82,7 @@ include(cmake/HandleCCache.cmake)           # ccache
 include(cmake/HandleCPack.cmake)            # CPack
 include(cmake/HandleEigen.cmake)            # Eigen3
 include(cmake/HandleMetis.cmake)            # metis
+include(cmake/HandleCephes.cmake)           # cephes
 include(cmake/HandleMKL.cmake)              # MKL
 include(cmake/HandleOpenMP.cmake)           # OpenMP
 include(cmake/HandlePerfTools.cmake)        # Google perftools

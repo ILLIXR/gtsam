@@ -110,7 +110,8 @@ GTSAM_EXPORT Point3 triangulateDLT(
  */
 GTSAM_EXPORT Point3 triangulateLOST(const std::vector<Pose3>& poses,
                                     const Point3Vector& calibratedMeasurements,
-                                    const SharedIsotropic& measurementNoise);
+                                    const SharedIsotropic& measurementNoise,
+                                    double rank_tol = 1e-9);
 
 /**
  * Create a factor graph with projection factors from poses and one calibration
@@ -439,7 +440,8 @@ Point3 triangulatePoint3(const std::vector<Pose3>& poses,
     auto calibratedMeasurements =
         calibrateMeasurementsShared<CALIBRATION>(*sharedCal, measurements);
 
-    point = triangulateLOST(poses, calibratedMeasurements, measurementNoise);
+    point = triangulateLOST(poses, calibratedMeasurements, measurementNoise, 
+                            rank_tol);
   } else {
     // construct projection matrices from poses & calibration
     auto projection_matrices = projectionMatricesFromPoses(poses, sharedCal);
@@ -512,7 +514,8 @@ Point3 triangulatePoint3(const CameraSet<CAMERA>& cameras,
     auto calibratedMeasurements =
         calibrateMeasurements<CAMERA>(cameras, measurements);
 
-    point = triangulateLOST(poses, calibratedMeasurements, measurementNoise);
+    point = triangulateLOST(poses, calibratedMeasurements, measurementNoise, 
+                            rank_tol);
   } else {
     // construct projection matrices from poses & calibration
     auto projection_matrices = projectionMatricesFromCameras(cameras);
@@ -571,6 +574,11 @@ struct GTSAM_EXPORT TriangulationParameters {
    */
   double dynamicOutlierRejectionThreshold;
 
+  /**
+   * if true, will use the LOST algorithm instead of DLT
+   */
+  bool useLOST;
+
   SharedNoiseModel noiseModel; ///< used in the nonlinear triangulation
 
   /**
@@ -585,10 +593,12 @@ struct GTSAM_EXPORT TriangulationParameters {
   TriangulationParameters(const double _rankTolerance = 1.0,
       const bool _enableEPI = false, double _landmarkDistanceThreshold = -1,
       double _dynamicOutlierRejectionThreshold = -1,
+      const bool _useLOST = false,
       const SharedNoiseModel& _noiseModel = nullptr) :
       rankTolerance(_rankTolerance), enableEPI(_enableEPI), //
       landmarkDistanceThreshold(_landmarkDistanceThreshold), //
       dynamicOutlierRejectionThreshold(_dynamicOutlierRejectionThreshold),
+      useLOST(_useLOST),
       noiseModel(_noiseModel){
   }
 
@@ -601,6 +611,7 @@ struct GTSAM_EXPORT TriangulationParameters {
         << std::endl;
     os << "dynamicOutlierRejectionThreshold = "
         << p.dynamicOutlierRejectionThreshold << std::endl;
+    os << "useLOST = " << p.useLOST << std::endl;
     os << "noise model" << std::endl;
     return os;
   }
@@ -662,8 +673,8 @@ class TriangulationResult : public std::optional<Point3> {
     return value();
   }
   // stream to output
-  friend std::ostream& operator<<(std::ostream& os,
-                                  const TriangulationResult& result) {
+  GTSAM_EXPORT friend std::ostream& operator<<(
+      std::ostream& os, const TriangulationResult& result) {
     if (result)
       os << "point = " << *result << std::endl;
     else
@@ -698,7 +709,7 @@ TriangulationResult triangulateSafe(const CameraSet<CAMERA>& cameras,
     try {
       Point3 point =
           triangulatePoint3<CAMERA>(cameras, measured, params.rankTolerance,
-                                    params.enableEPI, params.noiseModel);
+                                    params.enableEPI, params.noiseModel, params.useLOST);
 
       // Check landmark distance and re-projection errors to avoid outliers
       size_t i = 0;
@@ -750,4 +761,3 @@ using CameraSetCal3Fisheye = CameraSet<PinholeCamera<Cal3Fisheye>>;
 using CameraSetCal3Unified = CameraSet<PinholeCamera<Cal3Unified>>;
 using CameraSetSpherical = CameraSet<SphericalCamera>;
 } // \namespace gtsam
-

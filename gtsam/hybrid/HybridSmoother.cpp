@@ -57,14 +57,23 @@ Ordering HybridSmoother::getOrdering(
 
 /* ************************************************************************* */
 void HybridSmoother::update(HybridGaussianFactorGraph graph,
-                            const Ordering &ordering,
-                            std::optional<size_t> maxNrLeaves) {
+                            std::optional<size_t> maxNrLeaves,
+                            const std::optional<Ordering> given_ordering) {
+  Ordering ordering;
+  // If no ordering provided, then we compute one
+  if (!given_ordering.has_value()) {
+    ordering = this->getOrdering(graph);
+  } else {
+    ordering = *given_ordering;
+  }
+
   // Add the necessary conditionals from the previous timestep(s).
   std::tie(graph, hybridBayesNet_) =
       addConditionals(graph, hybridBayesNet_, ordering);
 
   // Eliminate.
-  auto bayesNetFragment = graph.eliminateSequential(ordering);
+  HybridBayesNet::shared_ptr bayesNetFragment =
+      graph.eliminateSequential(ordering);
 
   /// Prune
   if (maxNrLeaves) {
@@ -88,7 +97,8 @@ HybridSmoother::addConditionals(const HybridGaussianFactorGraph &originalGraph,
   HybridGaussianFactorGraph graph(originalGraph);
   HybridBayesNet hybridBayesNet(originalHybridBayesNet);
 
-  // If we are not at the first iteration, means we have conditionals to add.
+  // If hybridBayesNet is not empty,
+  // it means we have conditionals to add to the factor graph.
   if (!hybridBayesNet.empty()) {
     // We add all relevant conditional mixtures on the last continuous variable
     // in the previous `hybridBayesNet` to the graph

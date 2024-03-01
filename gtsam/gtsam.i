@@ -39,6 +39,11 @@ class KeyList {
   void remove(size_t key);
 
   void serialize() const;
+
+  // Special dunder methods for Python wrapping
+  __len__();
+  __contains__(size_t key);
+  __iter__();
 };
 
 // Actually a FastSet<Key>
@@ -64,6 +69,11 @@ class KeySet {
   bool count(size_t key) const;  // returns true if value exists
 
   void serialize() const;
+
+  // Special dunder methods for Python wrapping
+  __len__();
+  __contains__(size_t key);
+  __iter__();
 };
 
 // Actually a vector<Key>, needed for Matlab
@@ -85,6 +95,11 @@ class KeyVector {
   void push_back(size_t key) const;
 
   void serialize() const;
+
+  // Special dunder methods for Python wrapping
+  __len__();
+  __contains__(size_t key);
+  __iter__();
 };
 
 // Actually a FastMap<Key,int>
@@ -105,6 +120,7 @@ class KeyGroupMap {
 };
 
 // Actually a FastSet<FactorIndex>
+// Used in Matlab wrapper
 class FactorIndexSet {
   FactorIndexSet();
   FactorIndexSet(const gtsam::FactorIndexSet& set);
@@ -121,6 +137,7 @@ class FactorIndexSet {
 };
 
 // Actually a vector<FactorIndex>
+// Used in Matlab wrapper
 class FactorIndices {
   FactorIndices();
   FactorIndices(const gtsam::FactorIndices& other);

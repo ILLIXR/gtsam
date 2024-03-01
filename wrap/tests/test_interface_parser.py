@@ -18,11 +18,12 @@ import unittest
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from gtwrap.interface_parser import (ArgumentList, Class, Constructor, Enum,
-                                     Enumerator, ForwardDeclaration,
-                                     GlobalFunction, Include, Method, Module,
-                                     Namespace, Operator, ReturnType,
-                                     StaticMethod, TemplatedType, Type,
+from gtwrap.interface_parser import (ArgumentList, Class, Constructor,
+                                     DunderMethod, Enum, Enumerator,
+                                     ForwardDeclaration, GlobalFunction,
+                                     Include, Method, Module, Namespace,
+                                     Operator, ReturnType, StaticMethod,
+                                     TemplatedType, Type,
                                      TypedefTemplateInstantiation, Typename,
                                      Variable)
 from gtwrap.template_instantiator.classes import InstantiatedClass
@@ -38,7 +39,7 @@ class TestInterfaceParser(unittest.TestCase):
 
     def test_basic_type(self):
         """Tests for BasicType."""
-        # Check basis type
+        # Check basic type
         t = Type.rule.parseString("int x")[0]
         self.assertEqual("int", t.typename.name)
         self.assertTrue(t.is_basic)
@@ -243,7 +244,7 @@ class TestInterfaceParser(unittest.TestCase):
         self.assertEqual("void", return_type.type1.typename.name)
         self.assertTrue(return_type.type1.is_basic)
 
-        # Test basis type
+        # Test basic type
         return_type = ReturnType.rule.parseString("size_t")[0]
         self.assertEqual("size_t", return_type.type1.typename.name)
         self.assertTrue(not return_type.type2)
@@ -343,6 +344,17 @@ class TestInterfaceParser(unittest.TestCase):
         self.assertEqual("Class", ret.name)
         self.assertEqual(1, len(ret.args))
         self.assertEqual("const T & name", ret.args.args_list[0].to_cpp())
+
+    def test_dunder_method(self):
+        """Test for special python dunder methods."""
+        iter_string = "__iter__();"
+        ret = DunderMethod.rule.parse_string(iter_string)[0]
+        self.assertEqual("iter", ret.name)
+
+        contains_string = "__contains__(size_t key);"
+        ret = DunderMethod.rule.parse_string(contains_string)[0]
+        self.assertEqual("contains", ret.name)
+        self.assertTrue(len(ret.args) == 1)
 
     def test_operator_overload(self):
         """Test for operator overloading."""

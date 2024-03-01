@@ -40,6 +40,7 @@ class HybridEliminationTree;
 class HybridBayesTree;
 class HybridJunctionTree;
 class DecisionTreeFactor;
+class TableFactor;
 class JacobianFactor;
 class HybridValues;
 
@@ -112,8 +113,8 @@ class GTSAM_EXPORT HybridGaussianFactorGraph
  public:
   using Base = HybridFactorGraph;
   using This = HybridGaussianFactorGraph;  ///< this class
-  using BaseEliminateable =
-      EliminateableFactorGraph<This>;          ///< for elimination
+  ///< for elimination
+  using BaseEliminateable = EliminateableFactorGraph<This>;
   using shared_ptr = std::shared_ptr<This>;  ///< shared_ptr to This
 
   using Values = gtsam::Values;  ///< backwards compatibility
@@ -139,16 +140,27 @@ class GTSAM_EXPORT HybridGaussianFactorGraph
   /// @{
 
   // TODO(dellaert):  customize print and equals.
-  // void print(const std::string& s = "HybridGaussianFactorGraph",
-  //            const KeyFormatter& keyFormatter = DefaultKeyFormatter) const
-  //     override;
+  // void print(
+  //     const std::string& s = "HybridGaussianFactorGraph",
+  //     const KeyFormatter& keyFormatter = DefaultKeyFormatter) const override;
+
+  void printErrors(
+      const HybridValues& values,
+      const std::string& str = "HybridGaussianFactorGraph: ",
+      const KeyFormatter& keyFormatter = DefaultKeyFormatter,
+      const std::function<bool(const Factor* /*factor*/,
+                               double /*whitenedError*/, size_t /*index*/)>&
+          printCondition =
+              [](const Factor*, double, size_t) { return true; }) const;
+
   // bool equals(const This& fg, double tol = 1e-9) const override;
 
   /// @}
   /// @name Standard Interface
   /// @{
 
-  using Base::error; // Expose error(const HybridValues&) method..
+  /// Expose error(const HybridValues&) method.
+  using Base::error;
 
   /**
    * @brief Compute error for each discrete assignment,
@@ -159,7 +171,8 @@ class GTSAM_EXPORT HybridGaussianFactorGraph
    * @param continuousValues Continuous values at which to compute the error.
    * @return AlgebraicDecisionTree<Key>
    */
-  AlgebraicDecisionTree<Key> error(const VectorValues& continuousValues) const;
+  AlgebraicDecisionTree<Key> errorTree(
+      const VectorValues& continuousValues) const;
 
   /**
    * @brief Compute unnormalized probability \f$ P(X | M, Z) \f$
