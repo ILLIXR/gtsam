@@ -109,3 +109,4 @@ void serialize(Archive& ar, std::optional<T>& t, const unsigned int version) {
 }  // namespace boost
 #endif
 #endif
+#endif
