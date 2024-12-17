@@ -25,16 +25,13 @@ class InfeasibleOrUnboundedProblem: public ThreadsafeException<
 public:
   InfeasibleOrUnboundedProblem() {
   }
-  virtual ~InfeasibleOrUnboundedProblem() noexcept {
+  ~InfeasibleOrUnboundedProblem() noexcept override {
   }
 
   const char* what() const noexcept override {
-    if (description_.empty())
+    if (description_->empty())
       description_ = "The problem is either infeasible or unbounded.\n";
-    return description_.c_str();
+    return description_->c_str();
   }
-
-private:
-  mutable std::string description_;
 };
 }

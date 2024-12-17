@@ -30,20 +30,23 @@ namespace gtsam {
  *   NED: North-East-Down navigation frame at some local origin
  *   ECEF: Earth-centered Earth-fixed, origin at Earth's center
  * See Farrell08book or e.g. http://www.dirsig.org/docs/new/coordinates.html
- * @addtogroup Navigation
+ * @ingroup navigation
  */
-class GTSAM_EXPORT GPSFactor: public NoiseModelFactor1<Pose3> {
+class GTSAM_EXPORT GPSFactor: public NoiseModelFactorN<Pose3> {
 
 private:
 
-  typedef NoiseModelFactor1<Pose3> Base;
+  typedef NoiseModelFactorN<Pose3> Base;
 
   Point3 nT_; ///< Position measurement in cartesian coordinates
 
 public:
 
+  // Provide access to the Matrix& version of evaluateError:
+  using Base::evaluateError;
+
   /// shorthand for a smart pointer to a factor
-  typedef boost::shared_ptr<GPSFactor> shared_ptr;
+  typedef std::shared_ptr<GPSFactor> shared_ptr;
 
   /// Typedef to this class
   typedef GPSFactor This;
@@ -51,7 +54,7 @@ public:
   /** default constructor - only use for serialization */
   GPSFactor(): nT_(0, 0, 0) {}
 
-  virtual ~GPSFactor() {}
+  ~GPSFactor() override {}
 
   /**
    * @brief Constructor from a measurement in a Cartesian frame.
@@ -66,20 +69,19 @@ public:
 
   /// @return a deep copy of this factor
   gtsam::NonlinearFactor::shared_ptr clone() const override {
-    return boost::static_pointer_cast<gtsam::NonlinearFactor>(
+    return std::static_pointer_cast<gtsam::NonlinearFactor>(
         gtsam::NonlinearFactor::shared_ptr(new This(*this)));
   }
 
   /// print
-  void print(const std::string& s, const KeyFormatter& keyFormatter =
-      DefaultKeyFormatter) const override;
+  void print(const std::string& s = "", const KeyFormatter& keyFormatter =
+                                            DefaultKeyFormatter) const override;
 
   /// equals
   bool equals(const NonlinearFactor& expected, double tol = 1e-9) const override;
 
   /// vector of errors
-  Vector evaluateError(const Pose3& p,
-      boost::optional<Matrix&> H = boost::none) const override;
+  Vector evaluateError(const Pose3& p, OptionalMatrixType H) const override;
 
   inline const Point3 & measurementIn() const {
     return nT_;
@@ -95,33 +97,39 @@ public:
 
 private:
 
+#ifdef GTSAM_ENABLE_BOOST_SERIALIZATION  ///
   /// Serialization function
   friend class boost::serialization::access;
   template<class ARCHIVE>
   void serialize(ARCHIVE & ar, const unsigned int /*version*/) {
+    // NoiseModelFactor1 instead of NoiseModelFactorN for backward compatibility
     ar
         & boost::serialization::make_nvp("NoiseModelFactor1",
             boost::serialization::base_object<Base>(*this));
     ar & BOOST_SERIALIZATION_NVP(nT_);
   }
+#endif
 };
 
 /**
  * Version of GPSFactor for NavState
- * @addtogroup Navigation
+ * @ingroup navigation
  */
-class GTSAM_EXPORT GPSFactor2: public NoiseModelFactor1<NavState> {
+class GTSAM_EXPORT GPSFactor2: public NoiseModelFactorN<NavState> {
 
 private:
 
-  typedef NoiseModelFactor1<NavState> Base;
+  typedef NoiseModelFactorN<NavState> Base;
 
   Point3 nT_; ///< Position measurement in cartesian coordinates
 
 public:
 
+  // Provide access to the Matrix& version of evaluateError:
+  using Base::evaluateError;
+
   /// shorthand for a smart pointer to a factor
-  typedef boost::shared_ptr<GPSFactor2> shared_ptr;
+  typedef std::shared_ptr<GPSFactor2> shared_ptr;
 
   /// Typedef to this class
   typedef GPSFactor2 This;
@@ -129,7 +137,7 @@ public:
   /// default constructor - only use for serialization
   GPSFactor2():nT_(0, 0, 0) {}
 
-  virtual ~GPSFactor2() {}
+  ~GPSFactor2() override {}
 
   /// Constructor from a measurement in a Cartesian frame.
   GPSFactor2(Key key, const Point3& gpsIn, const SharedNoiseModel& model) :
@@ -138,20 +146,19 @@ public:
 
   /// @return a deep copy of this factor
   gtsam::NonlinearFactor::shared_ptr clone() const override {
-    return boost::static_pointer_cast<gtsam::NonlinearFactor>(
+    return std::static_pointer_cast<gtsam::NonlinearFactor>(
         gtsam::NonlinearFactor::shared_ptr(new This(*this)));
   }
 
   /// print
-  void print(const std::string& s, const KeyFormatter& keyFormatter =
-      DefaultKeyFormatter) const override;
+  void print(const std::string& s = "", const KeyFormatter& keyFormatter =
+                                            DefaultKeyFormatter) const override;
 
   /// equals
   bool equals(const NonlinearFactor& expected, double tol = 1e-9) const override;
 
   /// vector of errors
-  Vector evaluateError(const NavState& p,
-      boost::optional<Matrix&> H = boost::none) const override;
+  Vector evaluateError(const NavState& p, OptionalMatrixType H) const override;
 
   inline const Point3 & measurementIn() const {
     return nT_;
@@ -159,15 +166,18 @@ public:
 
 private:
 
+#ifdef GTSAM_ENABLE_BOOST_SERIALIZATION
   /// Serialization function
   friend class boost::serialization::access;
   template<class ARCHIVE>
   void serialize(ARCHIVE & ar, const unsigned int /*version*/) {
+    // NoiseModelFactor1 instead of NoiseModelFactorN for backward compatibility
     ar
         & boost::serialization::make_nvp("NoiseModelFactor1",
             boost::serialization::base_object<Base>(*this));
     ar & BOOST_SERIALIZATION_NVP(nT_);
   }
+#endif
 };
 
 } /// namespace gtsam

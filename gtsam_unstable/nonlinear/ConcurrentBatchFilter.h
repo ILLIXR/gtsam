@@ -31,7 +31,7 @@ namespace gtsam {
 class GTSAM_UNSTABLE_EXPORT ConcurrentBatchFilter : public ConcurrentFilter {
 
 public:
-  typedef boost::shared_ptr<ConcurrentBatchFilter> shared_ptr;
+  typedef std::shared_ptr<ConcurrentBatchFilter> shared_ptr;
   typedef ConcurrentFilter Base; ///< typedef for base class
 
   /** Meta information returned about the update */
@@ -50,7 +50,7 @@ public:
     double error; ///< The final factor graph error
 
     /// Constructor
-    Result() : iterations(0), lambdas(0), nonlinearVariables(0), linearVariables(0), error(0) {};
+    Result() : iterations(0), lambdas(0), nonlinearVariables(0), linearVariables(0), error(0) {}
 
     /// Getter methods
     size_t getIterations() const { return iterations; }
@@ -61,10 +61,10 @@ public:
   };
 
   /** Default constructor */
-  ConcurrentBatchFilter(const LevenbergMarquardtParams& parameters = LevenbergMarquardtParams()) : parameters_(parameters) {};
+  ConcurrentBatchFilter(const LevenbergMarquardtParams& parameters = LevenbergMarquardtParams()) : parameters_(parameters) {}
 
   /** Default destructor */
-  virtual ~ConcurrentBatchFilter() {};
+  ~ConcurrentBatchFilter() override = default;
 
   /** Implement a GTSAM standard 'print' function */
   void print(const std::string& s = "Concurrent Batch Filter:\n", const KeyFormatter& keyFormatter = DefaultKeyFormatter) const override;
@@ -124,13 +124,13 @@ public:
    * @param removeFactorIndices An optional set of indices corresponding to the factors you want to remove from the graph
    */
   virtual Result update(const NonlinearFactorGraph& newFactors = NonlinearFactorGraph(), const Values& newTheta = Values(),
-      const boost::optional<FastList<Key> >& keysToMove = boost::none, const boost::optional< std::vector<size_t> >& removeFactorIndices = boost::none);
+      const std::optional<FastList<Key> >& keysToMove = {}, const std::optional< std::vector<size_t> >& removeFactorIndices = {});
 
   /**
    * Perform any required operations before the synchronization process starts.
    * Called by 'synchronize'
    */
-  virtual void presync() override;
+  void presync() override;
 
   /**
    * Populate the provided containers with factors that constitute the filter branch summarization
@@ -162,7 +162,7 @@ public:
    * Perform any required operations after the synchronization process finishes.
    * Called by 'synchronize'
    */
-  virtual void postsync() override;
+  void postsync() override;
 
 protected:
 
@@ -200,7 +200,7 @@ private:
   void removeFactors(const std::vector<size_t>& slots);
 
   /** Use colamd to update into an efficient ordering */
-  void reorder(const boost::optional<FastList<Key> >& keysToMove = boost::none);
+  void reorder(const std::optional<FastList<Key> >& keysToMove = {});
 
   /** Marginalize out the set of requested variables from the filter, caching them for the smoother
    *  This effectively moves the separator.

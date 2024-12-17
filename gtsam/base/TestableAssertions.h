@@ -20,9 +20,11 @@
 #include <gtsam/base/Testable.h>
 #include <gtsam/global_includes.h>
 
-#include <boost/optional.hpp>
+#include <functional>
+#include <optional>
 #include <map>
 #include <iostream>
+#include <sstream>
 #include <vector>
 
 namespace gtsam {
@@ -39,21 +41,21 @@ inline bool assert_equal(const Key& expected, const Key& actual, double tol = 0.
 }
 
 /**
- * Comparisons for boost.optional objects that checks whether objects exist
+ * Comparisons for std.optional objects that checks whether objects exist
  * before comparing their values. First version allows for both to be
- * boost::none, but the second, with expected given rather than optional
+ * std::nullopt, but the second, with expected given rather than optional
  *
  * Concept requirement: V is testable
  */
 template<class V>
-bool assert_equal(const boost::optional<V>& expected,
-                  const boost::optional<V>& actual, double tol = 1e-9) {
+bool assert_equal(const std::optional<V>& expected,
+                  const std::optional<V>& actual, double tol = 1e-9) {
   if (!expected && actual) {
-    std::cout << "expected is boost::none, while actual is not" << std::endl;
+    std::cout << "expected is {}, while actual is not" << std::endl;
     return false;
   }
   if (expected && !actual) {
-    std::cout << "actual is boost::none, while expected is not" << std::endl;
+    std::cout << "actual is {}, while expected is not" << std::endl;
     return false;
   }
   if (!expected && !actual)
@@ -62,50 +64,22 @@ bool assert_equal(const boost::optional<V>& expected,
 }
 
 template<class V>
-bool assert_equal(const V& expected, const boost::optional<V>& actual, double tol = 1e-9) {
+bool assert_equal(const V& expected, const std::optional<V>& actual, double tol = 1e-9) {
   if (!actual) {
-    std::cout << "actual is boost::none" << std::endl;
+    std::cout << "actual is {}" << std::endl;
     return false;
   }
   return assert_equal(expected, *actual, tol);
 }
 
 template<class V>
-bool assert_equal(const V& expected, const boost::optional<const V&>& actual, double tol = 1e-9) {
+bool assert_equal(const V& expected, 
+    const std::optional<std::reference_wrapper<const V>>& actual, double tol = 1e-9) {
   if (!actual) {
-    std::cout << "actual is boost::none" << std::endl;
+    std::cout << "actual is std::nullopt" << std::endl;
     return false;
   }
-  return assert_equal(expected, *actual, tol);
-}
-
-/**
- * Version of assert_equals to work with vectors
- * \deprecated: use container equals instead
- */
-template<class V>
-bool assert_equal(const std::vector<V>& expected, const std::vector<V>& actual, double tol = 1e-9) {
-  bool match = true;
-  if (expected.size() != actual.size())
-    match = false;
-  if(match) {
-    size_t i = 0;
-    for(const V& a: expected) {
-      if (!assert_equal(a, actual[i++], tol)) {
-        match = false;
-        break;
-      }
-    }
-  }
-  if(!match) {
-    std::cout << "expected: " << std::endl;
-    for(const V& a: expected) { std::cout << a << " "; }
-    std::cout << "\nactual: " << std::endl;
-    for(const V& a: actual) { std::cout << a << " "; }
-    std::cout << std::endl;
-    return false;
-  }
-  return true;
+  return assert_equal(expected, *actual.get(), tol);
 }
 
 /**
@@ -347,6 +321,49 @@ bool assert_inequal(const V& expected, const V& actual, double tol = 1e-9) {
   expected.print("expected");
   actual.print("actual");
   return false;
+}
+
+/**
+ * Capture std out via cout stream and compare against string.
+ */
+template<class V>
+bool assert_stdout_equal(const std::string& expected, const V& actual) {
+  // Redirect output to buffer so we can compare
+  std::stringstream buffer;
+  // Save the original output stream so we can reset later
+  std::streambuf* old = std::cout.rdbuf(buffer.rdbuf());
+
+  // We test against actual std::cout for faithful reproduction
+  std::cout << actual;
+
+  // Get output string and reset stdout
+  std::string actual_ = buffer.str();
+  std::cout.rdbuf(old);
+
+  return assert_equal(expected, actual_);
+}
+
+/**
+ * Capture print function output and compare against string.
+ *
+ * @param s: Optional string to pass to the print() method.
+ */
+template <class V>
+bool assert_print_equal(const std::string& expected, const V& actual,
+                        const std::string& s = "") {
+  // Redirect output to buffer so we can compare
+  std::stringstream buffer;
+  // Save the original output stream so we can reset later
+  std::streambuf* old = std::cout.rdbuf(buffer.rdbuf());
+
+  // We test against actual std::cout for faithful reproduction
+  actual.print(s);
+
+  // Get output string and reset stdout
+  std::string actual_ = buffer.str();
+  std::cout.rdbuf(old);
+
+  return assert_equal(expected, actual_);
 }
 
 } // \namespace gtsam

@@ -17,36 +17,36 @@
  *  @author Vadim Indelman
  *  @author David Jensen
  *  @author Frank Dellaert
+ *  @author Varun Agrawal
  **/
 
 #include "PreintegrationBase.h"
 #include <gtsam/base/numericalDerivative.h>
-#include <boost/make_shared.hpp>
 
 using namespace std;
 
 namespace gtsam {
 
 //------------------------------------------------------------------------------
-PreintegrationBase::PreintegrationBase(const boost::shared_ptr<Params>& p,
+PreintegrationBase::PreintegrationBase(const std::shared_ptr<Params>& p,
                                        const Bias& biasHat)
     : p_(p), biasHat_(biasHat), deltaTij_(0.0) {
 }
 
 //------------------------------------------------------------------------------
 ostream& operator<<(ostream& os, const PreintegrationBase& pim) {
-  os << "    deltaTij " << pim.deltaTij_ << endl;
+  os << "    deltaTij = " << pim.deltaTij_ << endl;
   os << "    deltaRij.ypr = (" << pim.deltaRij().ypr().transpose() << ")" << endl;
-  os << "    deltaPij " << Point3(pim.deltaPij()) << endl;
-  os << "    deltaVij " << Point3(pim.deltaVij()) << endl;
-  os << "    gyrobias " << Point3(pim.biasHat_.gyroscope()) << endl;
-  os << "    acc_bias " << Point3(pim.biasHat_.accelerometer()) << endl;
+  os << "    deltaPij = " << pim.deltaPij().transpose() << endl;
+  os << "    deltaVij = " << pim.deltaVij().transpose() << endl;
+  os << "    gyrobias = " << pim.biasHat_.gyroscope().transpose() << endl;
+  os << "    acc_bias = " << pim.biasHat_.accelerometer().transpose() << endl;
   return os;
 }
 
 //------------------------------------------------------------------------------
 void PreintegrationBase::print(const string& s) const {
-  cout << (s == "" ? s : s + "\n") << *this << endl;
+  cout << (s.empty() ? s : s + "\n") << *this << endl;
 }
 
 //------------------------------------------------------------------------------
@@ -156,9 +156,9 @@ Vector9 PreintegrationBase::computeError(const NavState& state_i,
       state_j.localCoordinates(predictedState_j, H2 ? &D_error_state_j : 0,
                                H1 || H3 ? &D_error_predict : 0);
 
-  if (H1) *H1 << D_error_predict* D_predict_state_i;
+  if (H1) *H1 << D_error_predict * D_predict_state_i;
   if (H2) *H2 << D_error_state_j;
-  if (H3) *H3 << D_error_predict* D_predict_bias_i;
+  if (H3) *H3 << D_error_predict * D_predict_bias_i;
 
   return error;
 }

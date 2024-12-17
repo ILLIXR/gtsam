@@ -20,8 +20,9 @@
 // \callgraph
 #pragma once
 
-#include <gtsam_unstable/nonlinear/FixedLagSmoother.h>
+#include <gtsam/nonlinear/FixedLagSmoother.h>
 #include <gtsam/nonlinear/ISAM2.h>
+#include "gtsam_unstable/dllexport.h"
 
 namespace gtsam {
 
@@ -35,7 +36,7 @@ class GTSAM_UNSTABLE_EXPORT IncrementalFixedLagSmoother: public FixedLagSmoother
 public:
 
   /// Typedef for a shared pointer to an Incremental Fixed-Lag Smoother
-  typedef boost::shared_ptr<IncrementalFixedLagSmoother> shared_ptr;
+  typedef std::shared_ptr<IncrementalFixedLagSmoother> shared_ptr;
 
   /** default constructor */
   IncrementalFixedLagSmoother(double smootherLag = 0.0,
@@ -44,15 +45,15 @@ public:
   }
 
   /** destructor */
-  virtual ~IncrementalFixedLagSmoother() {
+  ~IncrementalFixedLagSmoother() override {
   }
 
   /** Print the factor for debugging and testing (implementing Testable) */
-  virtual void print(const std::string& s = "IncrementalFixedLagSmoother:\n",
+  void print(const std::string& s = "IncrementalFixedLagSmoother:\n",
       const KeyFormatter& keyFormatter = DefaultKeyFormatter) const override;
 
   /** Check if two IncrementalFixedLagSmoother Objects are equal */
-  virtual bool equals(const FixedLagSmoother& rhs, double tol = 1e-9) const override;
+  bool equals(const FixedLagSmoother& rhs, double tol = 1e-9) const override;
 
   /**
    * Add new factors, updating the solution and re-linearizing as needed.
@@ -113,6 +114,9 @@ public:
   /// Get results of latest isam2 update
   const ISAM2Result& getISAM2Result() const{ return isamResult_; }
 
+  /// Get the iSAM2 object which is used for the inference internally
+  const ISAM2& getISAM2() const { return isam_; }
+
 protected:
 
   /** Create default parameters */
@@ -134,7 +138,7 @@ protected:
 
   /** Fill in an iSAM2 ConstrainedKeys structure such that the provided keys are eliminated before all others */
   void createOrderingConstraints(const KeyVector& marginalizableKeys,
-      boost::optional<FastMap<Key, int> >& constrainedKeys) const;
+      std::optional<FastMap<Key, int> >& constrainedKeys) const;
 
 private:
   /** Private methods for printing debug information */

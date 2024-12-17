@@ -1,6 +1,6 @@
 include(CheckCXXCompilerFlag) # for check_cxx_compiler_flag()
 
-# Set cmake policy to recognize the AppleClang compiler
+# Set cmake policy to recognize the Apple Clang compiler
 # independently from the Clang compiler.
 if(POLICY CMP0025)
   cmake_policy(SET CMP0025 NEW)
@@ -59,10 +59,10 @@ endif()
 option(GTSAM_BUILD_TYPE_POSTFIXES        "Enable/Disable appending the build type to the name of compiled libraries" ON)
 
 # Define all cache variables, to be populated below depending on the OS/compiler:
-set(GTSAM_COMPILE_OPTIONS_PRIVATE        "" CACHE STRING "(Do not edit) Private compiler flags for all build configurations." FORCE)
-set(GTSAM_COMPILE_OPTIONS_PUBLIC         "" CACHE STRING "(Do not edit) Public compiler flags (exported to user projects) for all build configurations."  FORCE)
-set(GTSAM_COMPILE_DEFINITIONS_PRIVATE    "" CACHE STRING "(Do not edit) Private preprocessor macros for all build configurations." FORCE)
-set(GTSAM_COMPILE_DEFINITIONS_PUBLIC     "" CACHE STRING "(Do not edit) Public preprocessor macros for all build configurations." FORCE)
+set(GTSAM_COMPILE_OPTIONS_PRIVATE        "" CACHE INTERNAL "(Do not edit) Private compiler flags for all build configurations." FORCE)
+set(GTSAM_COMPILE_OPTIONS_PUBLIC         "" CACHE INTERNAL "(Do not edit) Public compiler flags (exported to user projects) for all build configurations."  FORCE)
+set(GTSAM_COMPILE_DEFINITIONS_PRIVATE    "" CACHE INTERNAL "(Do not edit) Private preprocessor macros for all build configurations." FORCE)
+set(GTSAM_COMPILE_DEFINITIONS_PUBLIC     "" CACHE INTERNAL "(Do not edit) Public preprocessor macros for all build configurations." FORCE)
 mark_as_advanced(GTSAM_COMPILE_OPTIONS_PRIVATE)
 mark_as_advanced(GTSAM_COMPILE_OPTIONS_PUBLIC)
 mark_as_advanced(GTSAM_COMPILE_DEFINITIONS_PRIVATE)
@@ -71,7 +71,7 @@ mark_as_advanced(GTSAM_COMPILE_DEFINITIONS_PUBLIC)
 foreach(build_type ${GTSAM_CMAKE_CONFIGURATION_TYPES})
   string(TOUPPER "${build_type}" build_type_toupper)
 
-  # Define empty cache variables for "public". "private" are creaed below.
+  # Define empty cache variables for "public". "private" are created below.
   set(GTSAM_COMPILE_OPTIONS_PUBLIC_${build_type_toupper}      "" CACHE STRING "(User editable) Public compiler flags (exported to user projects) for `${build_type_toupper}` configuration.")
   set(GTSAM_COMPILE_DEFINITIONS_PUBLIC_${build_type_toupper}  "" CACHE STRING "(User editable) Public preprocessor macros for `${build_type_toupper}` configuration.")
 endforeach()
@@ -87,11 +87,18 @@ if(MSVC)
   list_append_cache(GTSAM_COMPILE_DEFINITIONS_PRIVATE
     WINDOWS_LEAN_AND_MEAN
     NOMINMAX
-	)
+  )
+  list_append_cache(GTSAM_COMPILE_DEFINITIONS_PUBLIC
+    _ENABLE_EXTENDED_ALIGNED_STORAGE
+  )
   # Avoid literally hundreds to thousands of warnings:
   list_append_cache(GTSAM_COMPILE_OPTIONS_PUBLIC
-	/wd4267 # warning C4267: 'initializing': conversion from 'size_t' to 'int', possible loss of data
+    /wd4267 # warning C4267: 'initializing': conversion from 'size_t' to 'int', possible loss of data
   )
+
+  add_compile_options(/wd4005)
+  add_compile_options(/wd4101)
+  add_compile_options(/wd4834)
 
 endif()
 
@@ -122,6 +129,8 @@ else()
     -fPIC                                          # ensure proper code generation for shared libraries
     $<$<CXX_COMPILER_ID:GNU>:-Wreturn-local-addr -Werror=return-local-addr>            # Error: return local address
     $<$<CXX_COMPILER_ID:Clang>:-Wreturn-stack-address   -Werror=return-stack-address>  # Error: return local address
+    $<$<CXX_COMPILER_ID:Clang>:-Wno-weak-template-vtables>  # TODO(dellaert): don't know how to resolve
+    $<$<CXX_COMPILER_ID:Clang>:-Wno-weak-vtables>  # TODO(dellaert): don't know how to resolve
     -Wreturn-type  -Werror=return-type             # Error on missing return()
     -Wformat -Werror=format-security               # Error on wrong printf() arguments
     $<$<COMPILE_LANGUAGE:CXX>:${flag_override_}>   # Enforce the use of the override keyword
@@ -134,16 +143,19 @@ else()
   set(GTSAM_COMPILE_OPTIONS_PRIVATE_TIMING          -g -O3  CACHE STRING "(User editable) Private compiler flags for Timing configuration.")
 endif()
 
-# Enable C++11:
+# Enable C++17:
 if (NOT CMAKE_VERSION VERSION_LESS 3.8)
-    set(GTSAM_COMPILE_FEATURES_PUBLIC "cxx_std_11" CACHE STRING "CMake compile features property for all gtsam targets.")
+    set(GTSAM_COMPILE_FEATURES_PUBLIC "cxx_std_17" CACHE STRING "CMake compile features property for all gtsam targets.")
     # See: https://cmake.org/cmake/help/latest/prop_tgt/CXX_EXTENSIONS.html
-    # This is to enable -std=c++11 instead of -std=g++11
     set(CMAKE_CXX_EXTENSIONS OFF)
+    if (MSVC)
+      # NOTE(jlblanco): seems to be required in addition to the cxx_std_17 above?
+      list_append_cache(GTSAM_COMPILE_OPTIONS_PUBLIC /std:c++latest)
+    endif()
 else()
   # Old cmake versions:
   if (NOT MSVC)
-    list_append_cache(GTSAM_COMPILE_OPTIONS_PUBLIC $<$<COMPILE_LANGUAGE:CXX>:-std=c++11>)
+    list_append_cache(GTSAM_COMPILE_OPTIONS_PUBLIC $<$<COMPILE_LANGUAGE:CXX>:-std=c++17>)
   endif()
 endif()
 
@@ -179,19 +191,43 @@ set(CMAKE_EXE_LINKER_FLAGS_PROFILING ${GTSAM_CMAKE_EXE_LINKER_FLAGS_PROFILING})
 
 # Clang uses a template depth that is less than standard and is too small
 if(${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang")
-    # Apple Clang before 5.0 does not support -ftemplate-depth.
-    if(NOT (APPLE AND "${CMAKE_CXX_COMPILER_VERSION}" VERSION_LESS "5.0"))
-        list_append_cache(GTSAM_COMPILE_OPTIONS_PUBLIC "-ftemplate-depth=1024")
-    endif()
+  # Apple Clang before 5.0 does not support -ftemplate-depth.
+  if(NOT (APPLE AND "${CMAKE_CXX_COMPILER_VERSION}" VERSION_LESS "5.0"))
+    list_append_cache(GTSAM_COMPILE_OPTIONS_PUBLIC "-ftemplate-depth=1024")
+  endif()
 endif()
 
 if (NOT MSVC)
-  option(GTSAM_BUILD_WITH_MARCH_NATIVE  "Enable/Disable building with all instructions supported by native architecture (binary may not be portable!)" ON)
+  option(GTSAM_BUILD_WITH_MARCH_NATIVE  "Enable/Disable building with all instructions supported by native architecture (binary may not be portable!)" OFF)
   if(GTSAM_BUILD_WITH_MARCH_NATIVE)
-    # Add as public flag so all dependant projects also use it, as required
-    # by Eigen to avid crashes due to SIMD vectorization:
-    list_append_cache(GTSAM_COMPILE_OPTIONS_PUBLIC "-march=native")
-  endif()
+    # Check if Apple OS and compiler is [Apple]Clang
+    if(APPLE AND (${CMAKE_CXX_COMPILER_ID} MATCHES "^(Apple)?Clang$"))
+      # Check Clang version since march=native is only supported for version 15.0+.
+      if("${CMAKE_CXX_COMPILER_VERSION}" VERSION_LESS "15.0")
+        if(NOT CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+          # Add as public flag so all dependent projects also use it, as required
+          # by Eigen to avoid crashes due to SIMD vectorization:
+          list_append_cache(GTSAM_COMPILE_OPTIONS_PUBLIC "-march=native")
+        else()
+          message(WARNING "Option GTSAM_BUILD_WITH_MARCH_NATIVE ignored, because native architecture is not supported for Apple silicon and AppleClang version < 15.0.")
+        endif() # CMAKE_SYSTEM_PROCESSOR
+      else()
+        # Add as public flag so all dependent projects also use it, as required
+        # by Eigen to avoid crashes due to SIMD vectorization:
+        list_append_cache(GTSAM_COMPILE_OPTIONS_PUBLIC "-march=native")
+      endif() # CMAKE_CXX_COMPILER_VERSION
+    else()
+      include(CheckCXXCompilerFlag)
+      CHECK_CXX_COMPILER_FLAG("-march=native" COMPILER_SUPPORTS_MARCH_NATIVE)
+      if(COMPILER_SUPPORTS_MARCH_NATIVE)
+        # Add as public flag so all dependent projects also use it, as required
+        # by Eigen to avoid crashes due to SIMD vectorization:
+        list_append_cache(GTSAM_COMPILE_OPTIONS_PUBLIC "-march=native")
+      else()
+        message(WARNING "Option GTSAM_BUILD_WITH_MARCH_NATIVE ignored, because native architecture is not supported.")
+      endif() # COMPILER_SUPPORTS_MARCH_NATIVE
+    endif() # APPLE
+  endif() # GTSAM_BUILD_WITH_MARCH_NATIVE
 endif()
 
 # Set up build type library postfixes
@@ -204,9 +240,9 @@ endif()
 
 # Make common binary output directory when on Windows
 if(WIN32)
-  set(RUNTIME_OUTPUT_PATH "${CMAKE_BINARY_DIR}/bin")
-  set(EXECUTABLE_OUTPUT_PATH "${CMAKE_BINARY_DIR}/bin")
-  set(LIBRARY_OUTPUT_PATH "${CMAKE_BINARY_DIR}/lib")
+  set(RUNTIME_OUTPUT_PATH "${GTSAM_BINARY_DIR}/bin")
+  set(EXECUTABLE_OUTPUT_PATH "${GTSAM_BINARY_DIR}/bin")
+  set(LIBRARY_OUTPUT_PATH "${GTSAM_BINARY_DIR}/lib")
 endif()
 
 # Set up build type list for cmake-gui

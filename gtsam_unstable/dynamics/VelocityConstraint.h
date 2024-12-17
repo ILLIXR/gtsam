@@ -30,9 +30,12 @@ typedef enum {
  * NOTE: this approximation is insufficient for large timesteps, but is accurate
  * if timesteps are small.
  */
-class VelocityConstraint : public gtsam::NoiseModelFactor2<PoseRTV,PoseRTV> {
+class VelocityConstraint : public gtsam::NoiseModelFactorN<PoseRTV,PoseRTV> {
 public:
   typedef gtsam::NoiseModelFactor2<PoseRTV,PoseRTV> Base;
+
+  // Provide access to the Matrix& version of evaluateError:
+  using Base::evaluateError;
 
 protected:
 
@@ -70,23 +73,24 @@ public:
   VelocityConstraint(Key key1, Key key2, double dt, const gtsam::SharedNoiseModel& model)
   : Base(model, key1, key2), dt_(dt), integration_mode_(dynamics::TRAPEZOIDAL) {}
 
-  virtual ~VelocityConstraint() {}
+  ~VelocityConstraint() override {}
 
   /// @return a deep copy of this factor
   gtsam::NonlinearFactor::shared_ptr clone() const override {
-    return boost::static_pointer_cast<gtsam::NonlinearFactor>(
+    return std::static_pointer_cast<gtsam::NonlinearFactor>(
         gtsam::NonlinearFactor::shared_ptr(new VelocityConstraint(*this))); }
 
   /**
    * Calculates the error for trapezoidal model given
    */
   gtsam::Vector evaluateError(const PoseRTV& x1, const PoseRTV& x2,
-      boost::optional<gtsam::Matrix&> H1=boost::none,
-      boost::optional<gtsam::Matrix&> H2=boost::none) const override {
+      OptionalMatrixType H1, OptionalMatrixType H2) const override {
     if (H1) *H1 = gtsam::numericalDerivative21<gtsam::Vector,PoseRTV,PoseRTV>(
-        boost::bind(VelocityConstraint::evaluateError_, _1, _2, dt_, integration_mode_), x1, x2, 1e-5);
+        std::bind(VelocityConstraint::evaluateError_, std::placeholders::_1,
+            std::placeholders::_2, dt_, integration_mode_), x1, x2, 1e-5);
     if (H2) *H2 = gtsam::numericalDerivative22<gtsam::Vector,PoseRTV,PoseRTV>(
-        boost::bind(VelocityConstraint::evaluateError_, _1, _2, dt_, integration_mode_), x1, x2, 1e-5);
+        std::bind(VelocityConstraint::evaluateError_, std::placeholders::_1,
+            std::placeholders::_2, dt_, integration_mode_), x1, x2, 1e-5);
     return evaluateError_(x1, x2, dt_, integration_mode_);
   }
 

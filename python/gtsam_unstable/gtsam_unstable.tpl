@@ -7,22 +7,19 @@
  * ** THIS FILE IS AUTO-GENERATED, DO NOT MODIFY! **
  */
 
-// Include relevant boost libraries required by GTSAM
-{include_boost}
-
 #include <pybind11/eigen.h>
 #include <pybind11/stl_bind.h>
 #include <pybind11/pybind11.h>
+#include <pybind11/functional.h>
+#include <pybind11/iostream.h>
 #include "gtsam/base/serialization.h"
-#include "gtsam/nonlinear/utilities.h"  // for RedirectCout.
+#include "gtsam/base/utilities.h"  // for RedirectCout.
 
 // These are the included headers listed in `gtsam_unstable.i`
 {includes}
 #include <boost/serialization/export.hpp>
 
 {boost_class_export}
-
-{hoder_type}
 
 #include "python/gtsam_unstable/preamble.h"
 
@@ -38,7 +35,7 @@ PYBIND11_MODULE({module_name}, m_) {{
 
 {wrapped_namespace}
 
-#include "python/gtsam_unstable/specializations.h"
+#include "python/gtsam_unstable/specializations/gtsam_unstable.h"
 
 }}
 

@@ -20,7 +20,6 @@
 
 #include <gtsam/base/Manifold.h>
 #include <gtsam/nonlinear/NonlinearOptimizer.h>
-#include <boost/tuple/tuple.hpp>
 
 namespace gtsam {
 
@@ -51,7 +50,7 @@ public:
 
   typedef NonlinearOptimizer Base;
   typedef NonlinearOptimizerParams Parameters;
-  typedef boost::shared_ptr<NonlinearConjugateGradientOptimizer> shared_ptr;
+  typedef std::shared_ptr<NonlinearConjugateGradientOptimizer> shared_ptr;
 
 protected:
   Parameters params_;
@@ -67,7 +66,7 @@ public:
       const Values& initialValues, const Parameters& params = Parameters());
 
   /// Destructor
-  virtual ~NonlinearConjugateGradientOptimizer() {
+  ~NonlinearConjugateGradientOptimizer() override {
   }
 
   /** 
@@ -145,11 +144,11 @@ double lineSearch(const S &system, const V currentValues, const W &gradient) {
  * The last parameter is a switch between gradient-descent and conjugate gradient
  */
 template<class S, class V>
-boost::tuple<V, int> nonlinearConjugateGradient(const S &system,
+std::tuple<V, int> nonlinearConjugateGradient(const S &system,
     const V &initial, const NonlinearOptimizerParams &params,
     const bool singleIteration, const bool gradientDescent = false) {
 
-  // GTSAM_CONCEPT_MANIFOLD_TYPE(V);
+  // GTSAM_CONCEPT_MANIFOLD_TYPE(V)
 
   size_t iteration = 0;
 
@@ -160,7 +159,7 @@ boost::tuple<V, int> nonlinearConjugateGradient(const S &system,
       std::cout << "Exiting, as error = " << currentError << " < "
           << params.errorTol << std::endl;
     }
-    return boost::tie(initial, iteration);
+    return {initial, iteration};
   }
 
   V currentValues = initial;
@@ -200,6 +199,10 @@ boost::tuple<V, int> nonlinearConjugateGradient(const S &system,
     currentValues = system.advance(prevValues, alpha, direction);
     currentError = system.error(currentValues);
 
+    // User hook:
+    if (params.iterationHook)
+      params.iterationHook(iteration, prevError, currentError);
+
     // Maybe show output
     if (params.verbosity >= NonlinearOptimizerParams::ERROR)
       std::cout << "iteration: " << iteration << ", currentError: " << currentError << std::endl;
@@ -214,7 +217,7 @@ boost::tuple<V, int> nonlinearConjugateGradient(const S &system,
         << "nonlinearConjugateGradient: Terminating because reached maximum iterations"
         << std::endl;
 
-  return boost::tie(currentValues, iteration);
+  return {currentValues, iteration};
 }
 
 } // \ namespace gtsam

@@ -27,9 +27,6 @@
 
 #include <gtsam/inference/Ordering.h>
 
-#include <boost/algorithm/string.hpp>
-#include <boost/shared_ptr.hpp>
-
 #include <stdexcept>
 #include <iostream>
 #include <iomanip>
@@ -88,20 +85,28 @@ void NonlinearOptimizer::defaultOptimize() {
   }
 
   // Iterative loop
+  double newError = currentError; // used to avoid repeated calls to error()
   do {
     // Do next iteration
-    currentError = error(); // TODO(frank): don't do this twice at first !? Computed above!
+    currentError = newError;
     iterate();
     tictoc_finishedIteration();
+
+    // Update newError for either printouts or conditional-end checks:
+    newError = error();
+
+    // User hook:
+    if (params.iterationHook)
+      params.iterationHook(iterations(), currentError, newError);
 
     // Maybe show output
     if (params.verbosity >= NonlinearOptimizerParams::VALUES)
       values().print("newValues");
     if (params.verbosity >= NonlinearOptimizerParams::ERROR)
-      cout << "newError: " << error() << endl;
+      cout << "newError: " << newError << endl;
   } while (iterations() < params.maxIterations &&
            !checkConvergence(params.relativeErrorTol, params.absoluteErrorTol, params.errorTol,
-                             currentError, error(), params.verbosity) && std::isfinite(currentError));
+                             currentError, newError, params.verbosity) && std::isfinite(currentError));
 
   // Printing if verbose
   if (params.verbosity >= NonlinearOptimizerParams::TERMINATION) {
@@ -139,22 +144,24 @@ VectorValues NonlinearOptimizer::solve(const GaussianFactorGraph& gfg,
   } else if (params.isSequential()) {
     // Sequential QR or Cholesky (decided by params.getEliminationFunction())
     if (params.ordering)
-      delta = gfg.eliminateSequential(*params.ordering, params.getEliminationFunction(),
-                                      boost::none, params.orderingType)->optimize();
+      delta = gfg.eliminateSequential(*params.ordering,
+                                      params.getEliminationFunction())
+                  ->optimize();
     else
-      delta = gfg.eliminateSequential(params.getEliminationFunction(), boost::none,
-                                      params.orderingType)->optimize();
+      delta = gfg.eliminateSequential(params.orderingType,
+                                      params.getEliminationFunction())
+                  ->optimize();
   } else if (params.isIterative()) {
     // Conjugate Gradient -> needs params.iterativeParams
     if (!params.iterativeParams)
       throw std::runtime_error(
           "NonlinearOptimizer::solve: cg parameter has to be assigned ...");
 
-    if (auto pcg = boost::dynamic_pointer_cast<PCGSolverParameters>(
+    if (auto pcg = std::dynamic_pointer_cast<PCGSolverParameters>(
             params.iterativeParams)) {
       delta = PCGSolver(*pcg).optimize(gfg);
     } else if (auto spcg =
-                   boost::dynamic_pointer_cast<SubgraphSolverParameters>(
+                   std::dynamic_pointer_cast<SubgraphSolverParameters>(
                        params.iterativeParams)) {
       if (!params.ordering)
         throw std::runtime_error("SubgraphSolver needs an ordering");
