@@ -90,7 +90,11 @@ endif(GKRAND)
 
 
 # Check for features.
-check_include_file(execinfo.h HAVE_EXECINFO_H)
+if(ANDROID)
+  set(HAVE_EXECINFO_H FALSE CACHE INTERNAL "")
+else()
+  check_include_file(execinfo.h HAVE_EXECINFO_H)
+endif()
 if(HAVE_EXECINFO_H)
   set(GKlib_COPTIONS "${GKlib_COPTIONS} -DHAVE_EXECINFO_H")
 endif(HAVE_EXECINFO_H)
