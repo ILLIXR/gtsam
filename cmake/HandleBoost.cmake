@@ -22,9 +22,14 @@ endif()
 
 
 # Store these in variables so they are automatically replicated in GTSAMConfig.cmake and such.
-set(BOOST_FIND_MINIMUM_VERSION 1.65)
 set(BOOST_FIND_MINIMUM_COMPONENTS serialization system filesystem thread program_options date_time timer chrono regex)
-if (CMAKE_VERSION VERSION_LESS "3.30.0")
+if(ANDROID)
+    set(BOOST_FIND_MINIMUM_VERSION 1.72)
+else()
+    set(BOOST_FIND_MINIMUM_VERSION 1.65)
+endif()
+
+if (CMAKE_VERSION VERSION_LESS "3.30.0" AND NOT ANDROID)
     find_package(Boost ${BOOST_FIND_MINIMUM_VERSION} COMPONENTS ${BOOST_FIND_MINIMUM_COMPONENTS})
 else()
     find_package(Boost ${BOOST_FIND_MINIMUM_VERSION} COMPONENTS ${BOOST_FIND_MINIMUM_COMPONENTS} CONFIG)
